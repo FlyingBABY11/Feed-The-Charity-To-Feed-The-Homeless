@@ -1,21 +1,64 @@
-MIT License
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
 
-Copyright (c) 2025 MYRARE4MULA
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+contract ExclusiveNFT is ERC721URIStorage, Ownable {
+    using Counters for Counters.Counter;
+    Counters.Counter private _tokenIdCounter;
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+    // Royalties
+    uint256 public constant ROYALTY_PERCENTAGE = 10; // 10% royalty on secondary sales
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+    // Events
+    event NFTMinted(address indexed owner, uint256 indexed tokenId, string tokenURI);
+    event RoyaltyPaid(address indexed seller, uint256 amount);
+
+    constructor() ERC721("Don't Do It - Suicide Awareness Campaign", "DDISA") {}
+
+    // Mapping to store the token's metadata link
+    mapping(uint256 => string) private _metadata;
+
+    // Mint a unique NFT (1 of 1) with metadata
+    function mintNFT(string memory tokenURI) external onlyOwner {
+        uint256 tokenId = _tokenIdCounter.current();
+        require(tokenId == 0, "Only one token can be minted."); // Enforce 1 of 1 rule
+
+        _tokenIdCounter.increment();
+        _mint(msg.sender, tokenId);
+        _setTokenURI(tokenId, tokenURI);
+        _metadata[tokenId] = tokenURI;
+
+        emit NFTMinted(msg.sender, tokenId, tokenURI);
+    }
+
+    // Override transfer function to enforce royalty payment
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 tokenId,
+        uint256 batchSize
+    ) internal override {
+        require(batchSize == 1, "Batch transfers are not allowed.");
+        super._beforeTokenTransfer(from, to, tokenId, batchSize);
+
+        if (from != address(0) && to != address(0)) {
+            uint256 royaltyAmount = (msg.value * ROYALTY_PERCENTAGE) / 100;
+            payable(owner()).transfer(royaltyAmount);
+            emit RoyaltyPaid(from, royaltyAmount);
+        }
+    }
+
+    // Ensure metadata is always linked to the NFT
+    function tokenMetadata(uint256 tokenId) external view returns (string memory) {
+        require(_exists(tokenId), "Token does not exist.");
+        return _metadata[tokenId];
+    }
+
+    // Royalty enforcement: Mentions must accompany NFT in public usage
+    function enforceMention() public pure returns (string memory) {
+        return "This NFT was created by Ricky Amaya from ENA/B4BOT and Euthanasia.";
+    }
+}
